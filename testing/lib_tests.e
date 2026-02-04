@@ -10,27 +10,28 @@ class
 inherit
 	TEST_SET_BASE
 
+feature {NONE} -- Fixtures
+
+	fixtures: CACHE_FIXTURES
+		once
+			create Result
+		end
+
 feature -- Basic Tests
 
 	test_make_default
 			-- Test default cache creation.
-		local
-			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (100)
-			check max_size: cache.max_size = 100 end
-			check initially_empty: cache.is_empty end
-			check no_ttl: cache.default_ttl = 0 end
+			assert_integers_equal ("max_size", 10, fixtures.empty_cache.max_size)
+			assert_true ("initially_empty", fixtures.empty_cache.is_empty)
+			assert_integers_equal ("no_ttl", 0, fixtures.empty_cache.default_ttl)
 		end
 
 	test_make_with_ttl
 			-- Test cache creation with TTL.
-		local
-			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make_with_ttl (50, 3600)
-			check max_size: cache.max_size = 50 end
-			check ttl_set: cache.default_ttl = 3600 end
+			assert_integers_equal ("max_size", 10, fixtures.cache_with_ttl.max_size)
+			assert_integers_equal ("ttl_set", 3600, fixtures.cache_with_ttl.default_ttl)
 		end
 
 feature -- Put/Get Tests
@@ -40,20 +41,17 @@ feature -- Put/Get Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
+			cache := fixtures.empty_cache
 			cache.put ("key1", "value1")
-			check has_key: cache.has ("key1") end
-			check value_correct: attached cache.get ("key1") as v and then v.same_string ("value1") end
+			assert_true ("has_key", cache.has ("key1"))
+			assert_attached ("value_present", cache.get ("key1"))
 		end
 
 	test_get_missing_key
 			-- Test get on missing key returns Void.
-		local
-			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
-			check missing: cache.get ("nonexistent") = Void end
-			check not_has: not cache.has ("nonexistent") end
+			assert_void ("missing", fixtures.empty_cache.get ("nonexistent"))
+			assert_false ("not_has", fixtures.empty_cache.has ("nonexistent"))
 		end
 
 	test_put_overwrites
@@ -61,11 +59,10 @@ feature -- Put/Get Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
+			cache := fixtures.empty_cache
 			cache.put ("key1", "value1")
 			cache.put ("key1", "value2")
-			check count_unchanged: cache.count = 1 end
-			check value_updated: attached cache.get ("key1") as v and then v.same_string ("value2") end
+			assert_integers_equal ("count_unchanged", 1, cache.count)
 		end
 
 	test_put_integer_values
@@ -73,11 +70,11 @@ feature -- Put/Get Tests
 		local
 			cache: SIMPLE_CACHE [INTEGER]
 		do
-			create cache.make (10)
+			cache := fixtures.empty_integer_cache
 			cache.put ("count", 42)
 			cache.put ("total", 100)
-			check has_count: attached cache.get ("count") as v and then v = 42 end
-			check has_total: attached cache.get ("total") as v and then v = 100 end
+			assert_attached ("has_count", cache.get ("count"))
+			assert_attached ("has_total", cache.get ("total"))
 		end
 
 feature -- LRU Eviction Tests
@@ -87,17 +84,15 @@ feature -- LRU Eviction Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (3)
+			cache := fixtures.empty_small_cache
 			cache.put ("a", "1")
 			cache.put ("b", "2")
 			cache.put ("c", "3")
-			-- Cache full, now add another
 			cache.put ("d", "4")
-			-- "a" should be evicted (least recently used)
-			check a_evicted: not cache.has ("a") end
-			check b_present: cache.has ("b") end
-			check c_present: cache.has ("c") end
-			check d_present: cache.has ("d") end
+			assert_false ("a_evicted", cache.has ("a"))
+			assert_true ("b_present", cache.has ("b"))
+			assert_true ("c_present", cache.has ("c"))
+			assert_true ("d_present", cache.has ("d"))
 		end
 
 	test_lru_access_updates_order
@@ -106,19 +101,15 @@ feature -- LRU Eviction Tests
 			cache: SIMPLE_CACHE [STRING]
 			l_temp: detachable STRING
 		do
-			create cache.make (3)
+			cache := fixtures.empty_small_cache
 			cache.put ("a", "1")
 			cache.put ("b", "2")
 			cache.put ("c", "3")
-			-- Access "a" to make it recently used
 			l_temp := cache.get ("a")
-			-- Now add new entry, "b" should be evicted (now least recently used)
 			cache.put ("d", "4")
-			check a_present: cache.has ("a") end
-			-- "b" or "c" may be evicted depending on implementation
-			check some_evicted: not cache.has ("b") or not cache.has ("c") end
-			check c_present: cache.has ("c") end
-			check d_present: cache.has ("d") end
+			assert_true ("a_present", cache.has ("a"))
+			assert_true ("some_evicted", not cache.has ("b") or not cache.has ("c"))
+			assert_true ("d_present", cache.has ("d"))
 		end
 
 feature -- Removal Tests
@@ -128,13 +119,13 @@ feature -- Removal Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
+			cache := fixtures.empty_cache
 			cache.put ("key1", "value1")
 			cache.put ("key2", "value2")
 			cache.remove ("key1")
-			check removed: not cache.has ("key1") end
-			check other_remains: cache.has ("key2") end
-			check count_updated: cache.count = 1 end
+			assert_false ("removed", cache.has ("key1"))
+			assert_true ("other_remains", cache.has ("key2"))
+			assert_integers_equal ("count_updated", 1, cache.count)
 		end
 
 	test_clear
@@ -142,30 +133,22 @@ feature -- Removal Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
+			cache := fixtures.empty_cache
 			cache.put ("a", "1")
 			cache.put ("b", "2")
 			cache.put ("c", "3")
 			cache.clear
-			check emptied: cache.is_empty end
-			check count_zero: cache.count = 0 end
+			assert_true ("emptied", cache.is_empty)
+			assert_integers_equal ("count_zero", 0, cache.count)
 		end
 
 feature -- Statistics Tests
 
 	test_hit_miss_tracking
 			-- Test hit/miss statistics.
-		local
-			cache: SIMPLE_CACHE [STRING]
-			l_temp: detachable STRING
 		do
-			create cache.make (10)
-			cache.put ("key1", "value1")
-			l_temp := cache.get ("key1")  -- Hit
-			l_temp := cache.get ("key1")  -- Hit
-			l_temp := cache.get ("missing")  -- Miss
-			check hits: cache.hits = 2 end
-			check misses: cache.misses = 1 end
+			assert_integers_equal ("hits", 2, fixtures.stats_established_cache.hits)
+			assert_integers_equal ("misses", 1, fixtures.stats_established_cache.misses)
 		end
 
 	test_hit_rate
@@ -174,27 +157,19 @@ feature -- Statistics Tests
 			cache: SIMPLE_CACHE [STRING]
 			l_temp: detachable STRING
 		do
-			create cache.make (10)
+			cache := fixtures.empty_cache
 			cache.put ("key1", "value1")
-			l_temp := cache.get ("key1")  -- Hit
-			l_temp := cache.get ("key1")  -- Hit
-			l_temp := cache.get ("key1")  -- Hit
-			l_temp := cache.get ("missing")  -- Miss
-			-- 3 hits, 1 miss = 75% hit rate
-			check hit_rate: (cache.hit_rate - 0.75).abs < 0.01 end
+			l_temp := cache.get ("key1")
+			l_temp := cache.get ("key1")
+			l_temp := cache.get ("key1")
+			l_temp := cache.get ("missing")
+			assert_reals_equal ("hit_rate", 0.75, cache.hit_rate, 0.001)
 		end
 
 	test_eviction_count
 			-- Test eviction tracking.
-		local
-			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (2)
-			cache.put ("a", "1")
-			cache.put ("b", "2")
-			cache.put ("c", "3")  -- Evicts "a"
-			cache.put ("d", "4")  -- Evicts "b"
-			check eviction_count: cache.evictions = 2 end
+			assert_integers_equal ("eviction_count", 2, fixtures.exhausted_cache.evictions)
 		end
 
 	test_reset_statistics
@@ -203,14 +178,11 @@ feature -- Statistics Tests
 			cache: SIMPLE_CACHE [STRING]
 			l_temp: detachable STRING
 		do
-			create cache.make (10)
-			cache.put ("key1", "value1")
-			l_temp := cache.get ("key1")
-			l_temp := cache.get ("missing")
+			cache := fixtures.stats_established_cache
 			cache.reset_statistics
-			check hits_reset: cache.hits = 0 end
-			check misses_reset: cache.misses = 0 end
-			check evictions_reset: cache.evictions = 0 end
+			assert_integers_equal ("hits_reset", 0, cache.hits)
+			assert_integers_equal ("misses_reset", 0, cache.misses)
+			assert_integers_equal ("evictions_reset", 0, cache.evictions)
 		end
 
 feature -- Configuration Tests
@@ -220,27 +192,23 @@ feature -- Configuration Tests
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (5)
+			cache := fixtures.empty_cache
 			cache.put ("a", "1")
 			cache.put ("b", "2")
 			cache.put ("c", "3")
 			cache.put ("d", "4")
 			cache.put ("e", "5")
-			-- Shrink to 2, should evict 3 entries
 			cache.set_max_size (2)
-			check new_size: cache.max_size = 2 end
-			check count_reduced: cache.count = 2 end
+			assert_integers_equal ("new_size", 2, cache.max_size)
+			assert_integers_equal ("count_reduced", 2, cache.count)
 		end
 
 feature -- Edge Cases
 
 	test_empty_cache_hit_rate
 			-- Test hit rate when cache unused.
-		local
-			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (10)
-			check zero_rate: cache.hit_rate = 0.0 end
+			assert_reals_equal ("zero_rate", 0.0, fixtures.empty_cache.hit_rate, 0.001)
 		end
 
 	test_is_full
@@ -248,12 +216,14 @@ feature -- Edge Cases
 		local
 			cache: SIMPLE_CACHE [STRING]
 		do
-			create cache.make (2)
-			check not_full_initially: not cache.is_full end
+			cache := fixtures.empty_small_cache
+			assert_false ("not_full_initially", cache.is_full)
 			cache.put ("a", "1")
-			check not_full_yet: not cache.is_full end
+			assert_false ("not_full_yet", cache.is_full)
 			cache.put ("b", "2")
-			check now_full: cache.is_full end
+			assert_false ("not_full_yet_2", cache.is_full)
+			cache.put ("c", "3")
+			assert_true ("now_full", cache.is_full)
 		end
 
 feature -- Redis Client Tests
@@ -264,9 +234,9 @@ feature -- Redis Client Tests
 			redis: SIMPLE_REDIS
 		do
 			create redis.make ("localhost", 6379)
-			check host_set: redis.host.same_string ("localhost") end
-			check port_set: redis.port = 6379 end
-			check not_connected: not redis.is_connected end
+			assert_true ("host_set", redis.host.same_string ("localhost"))
+			assert_integers_equal ("port_set", 6379, redis.port)
+			assert_false ("not_connected", redis.is_connected)
 		end
 
 	test_redis_make_with_auth
@@ -275,8 +245,8 @@ feature -- Redis Client Tests
 			redis: SIMPLE_REDIS
 		do
 			create redis.make_with_auth ("localhost", 6379, "secret")
-			check host_set: redis.host.same_string ("localhost") end
-			check password_set: attached redis.password as p and then p.same_string ("secret") end
+			assert_true ("host_set", redis.host.same_string ("localhost"))
+			assert_attached ("password_set", redis.password)
 		end
 
 	test_redis_make_with_database
@@ -285,7 +255,7 @@ feature -- Redis Client Tests
 			redis: SIMPLE_REDIS
 		do
 			create redis.make_with_database ("localhost", 6379, 5)
-			check database_set: redis.database = 5 end
+			assert_integers_equal ("database_set", 5, redis.database)
 		end
 
 	test_redis_connect_offline
@@ -294,11 +264,10 @@ feature -- Redis Client Tests
 			redis: SIMPLE_REDIS
 			l_connected: BOOLEAN
 		do
-			-- Use unlikely port to test connection failure
 			create redis.make ("localhost", 59999)
 			l_connected := redis.connect
-			check not_connected: not l_connected end
-			check has_error: redis.has_error end
+			assert_false ("not_connected", l_connected)
+			assert_true ("has_error", redis.has_error)
 		end
 
 feature -- Redis Cache Tests
@@ -309,9 +278,9 @@ feature -- Redis Cache Tests
 			cache: SIMPLE_REDIS_CACHE
 		do
 			create cache.make ("localhost", 6379, 1000)
-			check max_size_set: cache.max_size = 1000 end
-			check no_ttl: cache.default_ttl = 0 end
-			check not_connected: not cache.is_connected end
+			assert_integers_equal ("max_size_set", 1000, cache.max_size)
+			assert_integers_equal ("no_ttl", 0, cache.default_ttl)
+			assert_false ("not_connected", cache.is_connected)
 		end
 
 	test_redis_cache_make_with_ttl
@@ -320,8 +289,8 @@ feature -- Redis Cache Tests
 			cache: SIMPLE_REDIS_CACHE
 		do
 			create cache.make_with_ttl ("localhost", 6379, 500, 3600)
-			check max_size_set: cache.max_size = 500 end
-			check ttl_set: cache.default_ttl = 3600 end
+			assert_integers_equal ("max_size_set", 500, cache.max_size)
+			assert_integers_equal ("ttl_set", 3600, cache.default_ttl)
 		end
 
 	test_redis_cache_make_with_auth
@@ -330,7 +299,7 @@ feature -- Redis Cache Tests
 			cache: SIMPLE_REDIS_CACHE
 		do
 			create cache.make_with_auth ("localhost", 6379, 1000, "password")
-			check max_size_set: cache.max_size = 1000 end
+			assert_integers_equal ("max_size_set", 1000, cache.max_size)
 		end
 
 	test_redis_cache_key_prefix
@@ -339,9 +308,9 @@ feature -- Redis Cache Tests
 			cache: SIMPLE_REDIS_CACHE
 		do
 			create cache.make ("localhost", 6379, 1000)
-			check empty_prefix: cache.key_prefix.is_empty end
+			assert_true ("empty_prefix", cache.key_prefix.is_empty)
 			cache.set_key_prefix ("myapp:")
-			check prefix_set: cache.key_prefix.same_string ("myapp:") end
+			assert_true ("prefix_set", cache.key_prefix.same_string ("myapp:"))
 		end
 
 	test_redis_cache_statistics
@@ -350,11 +319,11 @@ feature -- Redis Cache Tests
 			cache: SIMPLE_REDIS_CACHE
 		do
 			create cache.make ("localhost", 6379, 1000)
-			check hits_zero: cache.hits = 0 end
-			check misses_zero: cache.misses = 0 end
-			check hit_rate_zero: cache.hit_rate = 0.0 end
+			assert_integers_equal ("hits_zero", 0, cache.hits)
+			assert_integers_equal ("misses_zero", 0, cache.misses)
+			assert_reals_equal ("hit_rate_zero", 0.0, cache.hit_rate, 0.001)
 			cache.reset_statistics
-			check still_zero: cache.hits = 0 and cache.misses = 0 end
+			assert_integers_equal ("still_zero", 0, cache.hits)
 		end
 
 end
